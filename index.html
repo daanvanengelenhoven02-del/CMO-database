@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CMO database: community-up initiatives</title>
+<style>
+:root{--bg:#f7f8f6;--surface:#fff;--ink:#1d2a26;--muted:#5d6b66;--line:#d9dfdb;--accent:#1f5c4d;--accent-ink:#fff;--tint:#e6efeb}
+@media (prefers-color-scheme:dark){:root{--bg:#141a18;--surface:#1b2320;--ink:#e8eeeb;--muted:#9aaaa3;--line:#2c3733;--accent:#6fc2a9;--accent-ink:#0f1a16;--tint:#22302b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:0 20px 80px}
+header{padding:48px 0 24px}
+h1{font:600 clamp(28px,5vw,40px)/1.15 Georgia,"Times New Roman",serif;margin:0 0 10px}
+header p{color:var(--muted);margin:0;max-width:60ch}
+nav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:28px}
+nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--muted);cursor:pointer}
+nav button[aria-selected=true]{color:var(--ink);border-color:var(--accent);font-weight:600}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+label{display:block;font-weight:600;margin-bottom:2px}
+.hint{color:var(--muted);font-size:14px;margin:0 0 6px}
+textarea{width:100%;min-height:96px;padding:10px 12px;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;resize:vertical}
+.field{margin-bottom:18px}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 14px 6px;margin:0 0 20px}
+legend{font-weight:600;padding:0 6px}
+fieldset label{display:block;font-weight:400;margin-bottom:6px;cursor:pointer}
+.go{background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:11px 22px;font:inherit;font-weight:600;cursor:pointer}
+.go:disabled{opacity:.5;cursor:wait}
+#status{color:var(--muted);font-size:14px;margin:12px 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:22px;margin-bottom:18px}
+.card h2{font:600 22px/1.25 Georgia,serif;margin:0 0 6px}
+.meta{display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap}
+.score{background:var(--tint);color:var(--accent);padding:2px 10px;border-radius:99px;font-size:14px;font-weight:600;white-space:nowrap}
+.card a{color:var(--accent)}
+.card h3{font-size:15px;margin:16px 0 2px;color:var(--accent)}
+.card p{margin:0;max-width:70ch}
+iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;background:#fff}
+[hidden]{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Community-up initiatives: CMO database</h1>
+  <p>Search context–mechanism–outcome configurations from published initiatives, and judge for yourself which fit your own intervention.</p>
+</header>
+
+<nav role="tablist">
+  <button role="tab" id="t1" aria-selected="true" aria-controls="p1">Search</button>
+  <button role="tab" id="t2" aria-selected="false" aria-controls="p2">Add an initiative</button>
+</nav>
+
+<section id="p1" role="tabpanel" aria-labelledby="t1">
+  <div class="field"><label for="c">Context</label><p class="hint">Who is involved, what is the setting, which history, resources or power relations shape it?</p><textarea id="c"></textarea></div>
+  <div class="field"><label for="m">Mechanism</label><p class="hint">What do you expect to change in people's reasoning or behaviour, and why?</p><textarea id="m"></textarea></div>
+  <div class="field"><label for="o">Outcome</label><p class="hint">What do you hope happens, and for whom?</p><textarea id="o"></textarea></div>
+  <fieldset>
+    <legend>Rank results by</legend>
+    <label><input type="radio" name="rank" value="avg" checked> The average of the boxes I filled in</label>
+    <label><input type="radio" name="rank" value="context"> Context only</label>
+    <label><input type="radio" name="rank" value="mechanism"> Mechanism only</label>
+    <label><input type="radio" name="rank" value="outcome"> Outcome only</label>
+  </fieldset>
+  <button class="go" id="go" disabled>Search</button>
+  <div id="status" aria-live="polite">Loading the search model…</div>
+  <div id="results"></div>
+</section>
+
+<section id="p2" role="tabpanel" aria-labelledby="t2" hidden>
+  <p class="hint">Entries are checked by a coordinator before they appear in the search.</p>
+  <iframe id="form" title="Add an initiative" loading="lazy"></iframe>
+  <p><a id="formlink" target="_blank" rel="noopener">Open the form in a new tab</a></p>
+</section>
+</div>
+
+<script type="module">
+// ---- Settings: paste your Google Form link here (the normal /viewform link) ----
+const FORM_URL = "PASTE_YOUR_GOOGLE_FORM_LINK_HERE";
+// ---------------------------------------------------------------------------------
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+env.allowLocalModels = false;
+
+const $ = id => document.getElementById(id);
+const FIELDS = ["context", "mechanism", "outcome"];
+const INPUT = { context: $("c"), mechanism: $("m"), outcome: $("o") };
+
+// tabs
+for (const [t, p] of [["t1","p1"],["t2","p2"]]) $(t).onclick = () => {
+  for (const [a,b] of [["t1","p1"],["t2","p2"]]) { $(a).setAttribute("aria-selected", a===t); $(b).hidden = b!==p; }
+};
+$("form").src = FORM_URL + (FORM_URL.includes("?") ? "&" : "?") + "embedded=true";
+$("formlink").href = FORM_URL;
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u) ? u : "#";
+const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i]*b[i]; return s; };
+
+let entries = [], extractor;
+try {
+  entries = await (await fetch("data/entries.json")).json();
+  extractor = await pipeline("feature-extraction", "Xenova/multilingual-e5-small");
+  $("status").textContent = entries.length ? `${entries.length} initiatives ready to search. Fill in one or more boxes.` : "The database is still empty.";
+  $("go").disabled = false;
+} catch (e) {
+  $("status").textContent = "Could not load the search. Please refresh the page.";
+}
+
+$("go").onclick = async () => {
+  const rank = document.querySelector('input[name=rank]:checked').value;
+  const filled = rank === "avg" ? FIELDS.filter(f => INPUT[f].value.trim())
+                                : FIELDS.filter(f => f === rank && INPUT[f].value.trim());
+  if (!filled.length) {
+    $("status").textContent = rank === "avg" ? "Describe a context, mechanism or outcome first."
+      : `Fill in the ${rank} box, or choose a different way to rank.`;
+    return;
+  }
+  $("go").disabled = true; $("status").textContent = "Searching…";
+  const q = {};
+  for (const f of filled) q[f] = (await extractor("query: " + INPUT[f].value.trim(), {pooling:"mean", normalize:true})).data;
+
+  const ranked = entries.map(e => ({e, s: filled.reduce((t,f) => t + dot(q[f], e.emb[f]), 0) / filled.length}))
+                        .sort((a,b) => b.s - a.s).slice(0, 10);
+
+  $("results").innerHTML = ranked.map(({e,s}) => `
+    <article class="card">
+      <div class="meta"><h2>${esc(e.title)}</h2><span class="score" title="Semantic similarity to your query">${Math.round(s*100)}% match</span></div>
+      <p>${esc(e.description)}</p>
+      <p><a href="${esc(safeUrl(e.link))}" target="_blank" rel="noopener">Read the article</a></p>
+      ${FIELDS.map(f => `<h3>${f[0].toUpperCase()+f.slice(1)}</h3><p>${esc(e[f])}</p>`).join("")}
+    </article>`).join("");
+  $("status").textContent = "Closest matches first. Read the full narratives to judge whether they fit your situation.";
+  $("go").disabled = false;
+};
+</script>
+</body>
+</html>
