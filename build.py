@@ -7,6 +7,7 @@ from sentence_transformers import SentenceTransformer
 df = pd.read_csv(os.environ["SHEET_CSV_URL"])
 df.columns = [c.strip() for c in df.columns]
 df = df[df["Approved"].astype(str).str.strip().str.lower() == "yes"].reset_index(drop=True)
+df = df.fillna("")
 
 FIELDS = ["Context", "Mechanism", "Outcome"]
 model = SentenceTransformer("intfloat/multilingual-e5-small")
@@ -17,6 +18,7 @@ entries = []
 for i, r in df.iterrows():
     entries.append({
         "title": str(r["Title"]), "description": str(r["Description"]), "link": str(r["Link"]),
+        "parties": str(r.get("Parties involved", "")), "article": str(r.get("Name of the article", "")),,
         **{f.lower(): str(r[f]) for f in FIELDS},
         "emb": {f.lower(): [round(float(x), 4) for x in emb[f][i]] for f in FIELDS},
     })
