@@ -36,6 +36,8 @@ fieldset label{display:block;font-weight:400;margin-bottom:6px;cursor:pointer}
 .card p{margin:0;max-width:70ch}
 iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;background:#fff}
 [hidden]{display:none}
+.modes{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:20px}
+.modes label{font-weight:400;cursor:pointer}
 </style>
 </head>
 <body>
@@ -51,6 +53,12 @@ iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;b
 </nav>
 
 <section id="p1" role="tabpanel" aria-labelledby="t1">
+  <div class="modes">
+    <label><input type="radio" name="mode" value="free" checked> Describe it in my own words</label>
+    <label><input type="radio" name="mode" value="boxes"> Search per box (context, parties, mechanism, outcome)</label>
+  </div>
+  <div id="free" class="field"><label for="g">What do you see, and what do you want?</label><p class="hint">Describe your situation, who is involved, what you want to change or achieve, in as much detail as you like. The search looks for initiatives that align with your description.</p><textarea id="g" style="min-height:150px"></textarea></div>
+  <div id="boxes" hidden>
   <div class="field"><label for="c">Context</label><p class="hint">Who is involved, what is the setting, which history, resources or power relations shape it?</p><textarea id="c"></textarea></div>
   <div class="field"><label for="pa">Parties involved</label><p class="hint">Which organisations, groups or people are (or should be) involved?</p><textarea id="pa"></textarea></div>
   <div class="field"><label for="m">Mechanism</label><p class="hint">What do you expect to change in people's reasoning or behaviour, and why?</p><textarea id="m"></textarea></div>
@@ -63,6 +71,7 @@ iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;b
     <label><input type="radio" name="rank" value="mechanism"> Mechanism only</label>
     <label><input type="radio" name="rank" value="outcome"> Outcome only</label>
   </fieldset>
+  </div>
   <button class="go" id="go" disabled>Search</button>
   <div id="status" aria-live="polite">Loading the search model…</div>
   <div id="results"></div>
@@ -108,7 +117,25 @@ try {
   $("status").textContent = "Could not load the search. Please refresh the page.";
 }
 
+const mode = () => document.querySelector('input[name=mode]:checked').value;
+document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = () => {
+  $("free").hidden = mode() !== "free"; $("boxes").hidden = mode() !== "boxes";
+});
+
 $("go").onclick = async () => {
+  let ranked;
+  if (mode() === "free") {
+    const text = $("g").value.trim();
+    if (!text) { $("status").textContent = "Describe your situation and what you want first."; return; }
+    $("go").disabled = true; $("status").textContent = "Searching…";
+    const qv = (await extractor("query: " + text, {pooling:"mean", normalize:true})).data;
+    // score = average of the two best-matching parts of each entry
+    ranked = entries.map(e => {
+      const sims = FIELDS.filter(f => e.emb[f]).map(f => dot(qv, e.emb[f])).sort((a,b) => b-a).slice(0,2);
+      return {e, s: sims.reduce((t,x) => t + x, 0) / (sims.length || 1)};
+    }).sort((a,b) => b.s - a.s).slice(0, 10);
+    return show(ranked);
+  }
   const rank = document.querySelector('input[name=rank]:checked').value;
   const filled = rank === "avg" ? FIELDS.filter(f => INPUT[f].value.trim())
                                 : FIELDS.filter(f => f === rank && INPUT[f].value.trim());
@@ -121,9 +148,12 @@ $("go").onclick = async () => {
   const q = {};
   for (const f of filled) q[f] = (await extractor("query: " + INPUT[f].value.trim(), {pooling:"mean", normalize:true})).data;
 
-  const ranked = entries.map(e => ({e, s: filled.reduce((t,f) => t + (e.emb[f] ? dot(q[f], e.emb[f]) : 0), 0) / filled.length}))
+  ranked = entries.map(e => ({e, s: filled.reduce((t,f) => t + (e.emb[f] ? dot(q[f], e.emb[f]) : 0), 0) / filled.length}))
                         .sort((a,b) => b.s - a.s).slice(0, 10);
+  show(ranked);
+};
 
+function show(ranked) {
   $("results").innerHTML = ranked.map(({e,s}) => `
     <article class="card">
       <div class="meta"><h2>${esc(e.title)}</h2><span class="score" title="Semantic similarity to your query">${Math.round(s*100)}% match</span></div>
@@ -133,7 +163,7 @@ $("go").onclick = async () => {
     </article>`).join("");
   $("status").textContent = "Closest matches first. Read the full narratives to judge whether they fit your situation.";
   $("go").disabled = false;
-};
+}
 </script>
 </body>
 </html>
