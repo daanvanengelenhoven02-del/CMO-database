@@ -52,12 +52,14 @@ iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;b
 
 <section id="p1" role="tabpanel" aria-labelledby="t1">
   <div class="field"><label for="c">Context</label><p class="hint">Who is involved, what is the setting, which history, resources or power relations shape it?</p><textarea id="c"></textarea></div>
+  <div class="field"><label for="pa">Parties involved</label><p class="hint">Which organisations, groups or people are (or should be) involved?</p><textarea id="pa"></textarea></div>
   <div class="field"><label for="m">Mechanism</label><p class="hint">What do you expect to change in people's reasoning or behaviour, and why?</p><textarea id="m"></textarea></div>
   <div class="field"><label for="o">Outcome</label><p class="hint">What do you hope happens, and for whom?</p><textarea id="o"></textarea></div>
   <fieldset>
     <legend>Rank results by</legend>
     <label><input type="radio" name="rank" value="avg" checked> The average of the boxes I filled in</label>
     <label><input type="radio" name="rank" value="context"> Context only</label>
+    <label><input type="radio" name="rank" value="parties"> Parties involved only</label>
     <label><input type="radio" name="rank" value="mechanism"> Mechanism only</label>
     <label><input type="radio" name="rank" value="outcome"> Outcome only</label>
   </fieldset>
@@ -75,14 +77,15 @@ iframe{width:100%;height:1100px;border:1px solid var(--line);border-radius:8px;b
 
 <script type="module">
 // ---- Settings: paste your Google Form link here (the normal /viewform link) ----
-const FORM_URL = "https://forms.gle/1MHrERjkv4ubXifH9";
+const FORM_URL = "PASTE_YOUR_GOOGLE_FORM_LINK_HERE";
 // ---------------------------------------------------------------------------------
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 env.allowLocalModels = false;
 
 const $ = id => document.getElementById(id);
-const FIELDS = ["context", "mechanism", "outcome"];
-const INPUT = { context: $("c"), mechanism: $("m"), outcome: $("o") };
+const FIELDS = ["context", "parties", "mechanism", "outcome"];
+const LABEL = { context: "Context", parties: "Parties involved", mechanism: "Mechanism", outcome: "Outcome" };
+const INPUT = { context: $("c"), parties: $("pa"), mechanism: $("m"), outcome: $("o") };
 
 // tabs
 for (const [t, p] of [["t1","p1"],["t2","p2"]]) $(t).onclick = () => {
@@ -110,7 +113,7 @@ $("go").onclick = async () => {
   const filled = rank === "avg" ? FIELDS.filter(f => INPUT[f].value.trim())
                                 : FIELDS.filter(f => f === rank && INPUT[f].value.trim());
   if (!filled.length) {
-    $("status").textContent = rank === "avg" ? "Describe a context, mechanism or outcome first."
+    $("status").textContent = rank === "avg" ? "Describe a context, the parties involved, a mechanism or an outcome first."
       : `Fill in the ${rank} box, or choose a different way to rank.`;
     return;
   }
@@ -118,15 +121,15 @@ $("go").onclick = async () => {
   const q = {};
   for (const f of filled) q[f] = (await extractor("query: " + INPUT[f].value.trim(), {pooling:"mean", normalize:true})).data;
 
-  const ranked = entries.map(e => ({e, s: filled.reduce((t,f) => t + dot(q[f], e.emb[f]), 0) / filled.length}))
+  const ranked = entries.map(e => ({e, s: filled.reduce((t,f) => t + (e.emb[f] ? dot(q[f], e.emb[f]) : 0), 0) / filled.length}))
                         .sort((a,b) => b.s - a.s).slice(0, 10);
 
   $("results").innerHTML = ranked.map(({e,s}) => `
     <article class="card">
       <div class="meta"><h2>${esc(e.title)}</h2><span class="score" title="Semantic similarity to your query">${Math.round(s*100)}% match</span></div>
       <p>${esc(e.description)}</p>
-      <p><a href="${esc(safeUrl(e.link))}" target="_blank" rel="noopener">Read the article</a></p>
-      ${FIELDS.map(f => `<h3>${f[0].toUpperCase()+f.slice(1)}</h3><p>${esc(e[f])}</p>`).join("")}
+      <p><a href="${esc(safeUrl(e.link))}" target="_blank" rel="noopener">${esc(e.article || "Read the article")}</a></p>
+      ${FIELDS.filter(f => e[f]).map(f => `<h3>${LABEL[f]}</h3><p>${esc(e[f])}</p>`).join("")}
     </article>`).join("");
   $("status").textContent = "Closest matches first. Read the full narratives to judge whether they fit your situation.";
   $("go").disabled = false;
