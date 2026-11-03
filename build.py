@@ -22,13 +22,18 @@ model = SentenceTransformer("intfloat/multilingual-e5-small")
 emb = {col: model.encode(["passage: " + str(t) for t in df[col]], normalize_embeddings=True)
        for col in FIELDS}
 
+
+# "About" part: title + description, used only by the free-text search
+about_emb = model.encode(["passage: " + str(t) + ". " + str(d) for t, d in zip(df["Title"], df["Description"])],
+                         normalize_embeddings=True)
 entries = []
 for i, r in df.iterrows():
     entries.append({
         "title": str(r["Title"]), "description": str(r["Description"]),
         "link": str(r["Link"]), "article": str(r["Name of the article"]),
         **{key: str(r[col]) for col, key in FIELDS.items()},
-        "emb": {key: [round(float(x), 4) for x in emb[col][i]] for col, key in FIELDS.items()},
+        "emb": {**{key: [round(float(x), 4) for x in emb[col][i]] for col, key in FIELDS.items()},
+                "about": [round(float(x), 4) for x in about_emb[i]]},,
     })
 
 os.makedirs("data", exist_ok=True)
