@@ -33,7 +33,7 @@ for i, r in df.iterrows():
         "link": str(r["Link"]), "article": str(r["Name of the article"]),
         **{key: str(r[col]) for col, key in FIELDS.items()},
         "emb": {**{key: [round(float(x), 4) for x in emb[col][i]] for col, key in FIELDS.items()},
-                "about": [round(float(x), 4) for x in about_emb[i]]},,
+                "about": [round(float(x), 4) for x in about_emb[i]]},
     })
 
 os.makedirs("data", exist_ok=True)
